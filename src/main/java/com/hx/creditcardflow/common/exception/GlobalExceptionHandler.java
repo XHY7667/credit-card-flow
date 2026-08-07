@@ -1,5 +1,8 @@
 package com.hx.creditcardflow.common.exception;
 
+import com.hx.creditcardflow.cardaccount.exception.CardAccountNotFoundException;
+import com.hx.creditcardflow.cardaccount.exception.DuplicateCardAccountNumberException;
+import com.hx.creditcardflow.cardaccount.exception.InvalidCardAccountCreditLimitException;
 import com.hx.creditcardflow.merchant.exception.DuplicateMerchantCodeException;
 import com.hx.creditcardflow.merchant.exception.MerchantNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +19,45 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(CardAccountNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleCardAccountNotFound(
+            CardAccountNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(DuplicateCardAccountNumberException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateCardAccountNumber(
+            DuplicateCardAccountNumberException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(InvalidCardAccountCreditLimitException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidCardAccountCreditLimit(
+            InvalidCardAccountCreditLimitException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
 
     @ExceptionHandler(MerchantNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleMerchantNotFound(
