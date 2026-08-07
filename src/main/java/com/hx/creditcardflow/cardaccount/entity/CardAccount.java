@@ -90,6 +90,16 @@ public class CardAccount {
         updatedAt = Instant.now();
     }
 
+    public void update(
+            BigDecimal creditLimit,
+            BigDecimal availableCredit,
+            CardAccountStatus status
+    ) {
+        this.creditLimit = creditLimit;
+        this.availableCredit = availableCredit;
+        this.status = status;
+    }
+
     public Long getId() {
         return id;
     }
