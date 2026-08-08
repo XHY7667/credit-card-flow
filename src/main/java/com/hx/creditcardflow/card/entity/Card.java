@@ -89,6 +89,10 @@ public class Card {
         updatedAt = Instant.now();
     }
 
+    public void changeStatus(CardStatus status) {
+        this.status = status;
+    }
+
     public Long getId() {
         return id;
     }
