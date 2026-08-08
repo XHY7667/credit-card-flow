@@ -1,5 +1,9 @@
 package com.hx.creditcardflow.common.exception;
 
+import com.hx.creditcardflow.card.exception.CardAccountNotEligibleForCardIssuanceException;
+import com.hx.creditcardflow.card.exception.CardNotFoundException;
+import com.hx.creditcardflow.card.exception.DuplicateCardReferenceException;
+import com.hx.creditcardflow.card.exception.InvalidCardExpirationException;
 import com.hx.creditcardflow.cardaccount.exception.CardAccountNotFoundException;
 import com.hx.creditcardflow.cardaccount.exception.DuplicateCardAccountNumberException;
 import com.hx.creditcardflow.cardaccount.exception.InvalidCardAccountCreditLimitException;
@@ -19,6 +23,58 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(CardNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleCardNotFound(
+            CardNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(DuplicateCardReferenceException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateCardReference(
+            DuplicateCardReferenceException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(CardAccountNotEligibleForCardIssuanceException.class)
+    public ResponseEntity<ApiErrorResponse> handleCardAccountNotEligibleForCardIssuance(
+            CardAccountNotEligibleForCardIssuanceException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(InvalidCardExpirationException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidCardExpiration(
+            InvalidCardExpirationException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
 
     @ExceptionHandler(CardAccountNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleCardAccountNotFound(
