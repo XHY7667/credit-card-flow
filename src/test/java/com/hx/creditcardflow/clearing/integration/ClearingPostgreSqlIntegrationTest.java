@@ -1,4 +1,4 @@
-package com.hx.creditcardflow.reversal.integration;
+package com.hx.creditcardflow.clearing.integration;
 
 import com.hx.creditcardflow.authorization.entity.Authorization;
 import com.hx.creditcardflow.authorization.entity.AuthorizationChannel;
@@ -11,12 +11,12 @@ import com.hx.creditcardflow.card.repository.CardRepository;
 import com.hx.creditcardflow.cardaccount.entity.CardAccount;
 import com.hx.creditcardflow.cardaccount.entity.CardAccountStatus;
 import com.hx.creditcardflow.cardaccount.repository.CardAccountRepository;
+import com.hx.creditcardflow.clearing.entity.Clearing;
+import com.hx.creditcardflow.clearing.entity.ClearingStatus;
+import com.hx.creditcardflow.clearing.repository.ClearingRepository;
 import com.hx.creditcardflow.merchant.entity.Merchant;
 import com.hx.creditcardflow.merchant.entity.MerchantStatus;
 import com.hx.creditcardflow.merchant.repository.MerchantRepository;
-import com.hx.creditcardflow.reversal.entity.AuthorizationReversal;
-import com.hx.creditcardflow.reversal.entity.ReversalStatus;
-import com.hx.creditcardflow.reversal.repository.AuthorizationReversalRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 })
 @Testcontainers
 @Transactional
-class AuthorizationReversalPostgreSqlIntegrationTest {
+class ClearingPostgreSqlIntegrationTest {
 
     @Container
     @ServiceConnection
@@ -52,7 +52,7 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
     private EntityManager entityManager;
 
     @Autowired
-    private AuthorizationReversalRepository reversalRepository;
+    private ClearingRepository clearingRepository;
 
     @Autowired
     private AuthorizationRepository authorizationRepository;
@@ -71,7 +71,7 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
-        reversalRepository.deleteAll();
+        clearingRepository.deleteAll();
         authorizationRepository.deleteAll();
         cardRepository.deleteAll();
         cardAccountRepository.deleteAll();
@@ -79,83 +79,64 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
     }
 
     @Test
-    void shouldPersistAndReloadReversalWithAuthorizationRelationship() {
-        Authorization authorization = persistAuthorization("510001", AuthorizationStatus.APPROVED);
-        AuthorizationReversal reversal = reversalRepository.saveAndFlush(new AuthorizationReversal(
-                "REV-510001",
-                "IDEM-510001",
+    void shouldPersistAndReloadClearingWithAuthorizationAndValues() {
+        Authorization authorization = persistAuthorization("610001", AuthorizationStatus.APPROVED);
+        Clearing clearing = clearingRepository.saveAndFlush(new Clearing(
+                "CLR-610001",
                 authorization,
                 new BigDecimal("125.75"),
-                ReversalStatus.PENDING
+                "USD",
+                ClearingStatus.PENDING
         ));
-        Long reversalId = reversal.getId();
+        Long clearingId = clearing.getId();
         Long authorizationId = authorization.getId();
 
         entityManager.clear();
 
-        AuthorizationReversal persisted = reversalRepository.findById(reversalId).orElseThrow();
-        assertThat(persisted.getReversalReference()).isEqualTo("REV-510001");
-        assertThat(persisted.getIdempotencyKey()).isEqualTo("IDEM-510001");
-        assertThat(reversalRepository.findByIdempotencyKey("IDEM-510001"))
-                .contains(persisted);
+        Clearing persisted = clearingRepository.findById(clearingId).orElseThrow();
+        assertThat(clearingRepository.findByClearingReference("CLR-610001")).contains(persisted);
+        assertThat(persisted.getClearingReference()).isEqualTo("CLR-610001");
         assertThat(persisted.getAuthorization().getId()).isEqualTo(authorizationId);
-        assertThat(persisted.getAuthorization().getAuthorizationReference()).isEqualTo("AUTH-510001");
+        assertThat(persisted.getAuthorization().getAuthorizationReference()).isEqualTo("AUTH-610001");
         assertThat(persisted.getAmount()).isEqualByComparingTo("125.75");
-        assertThat(persisted.getStatus()).isEqualTo(ReversalStatus.PENDING);
+        assertThat(persisted.getCurrencyCode()).isEqualTo("USD");
+        assertThat(persisted.getStatus()).isEqualTo(ClearingStatus.PENDING);
         assertThat(persisted.getCreatedAt()).isNotNull();
-        assertThat(persisted.getUpdatedAt()).isNotNull();
+        assertThat(persisted.getUpdatedAt()).isEqualTo(persisted.getCreatedAt());
+
+        Integer numericScale = jdbcTemplate.queryForObject(
+                "SELECT numeric_scale FROM information_schema.columns "
+                        + "WHERE table_name = 'clearings' AND column_name = 'amount'",
+                Integer.class
+        );
+        Integer numericPrecision = jdbcTemplate.queryForObject(
+                "SELECT numeric_precision FROM information_schema.columns "
+                        + "WHERE table_name = 'clearings' AND column_name = 'amount'",
+                Integer.class
+        );
+        assertThat(numericPrecision).isEqualTo(19);
+        assertThat(numericScale).isEqualTo(2);
     }
 
     @Test
-    void shouldEnforceUniqueReversalReference() {
-        Authorization authorization = persistAuthorization("510002", AuthorizationStatus.APPROVED);
-        reversalRepository.saveAndFlush(new AuthorizationReversal(
-                "REV-DUPLICATE",
-                "IDEM-510002-A",
-                authorization,
-                new BigDecimal("20.00"),
-                ReversalStatus.COMPLETED
+    void shouldEnforceUniqueClearingReference() {
+        Authorization authorization = persistAuthorization("610002", AuthorizationStatus.APPROVED);
+        clearingRepository.saveAndFlush(new Clearing(
+                "CLR-DUPLICATE", authorization, new BigDecimal("20.00"), "USD", ClearingStatus.PENDING
         ));
 
-        AuthorizationReversal duplicate = new AuthorizationReversal(
-                "REV-DUPLICATE",
-                "IDEM-510002-B",
-                authorization,
-                new BigDecimal("20.00"),
-                ReversalStatus.PENDING
+        Clearing duplicate = new Clearing(
+                "CLR-DUPLICATE", authorization, new BigDecimal("30.00"), "USD", ClearingStatus.PENDING
         );
 
-        assertThatThrownBy(() -> reversalRepository.saveAndFlush(duplicate))
+        assertThatThrownBy(() -> clearingRepository.saveAndFlush(duplicate))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
-    void shouldEnforceUniqueIdempotencyKey() {
-        Authorization authorization = persistAuthorization("510003", AuthorizationStatus.APPROVED);
-        reversalRepository.saveAndFlush(new AuthorizationReversal(
-                "REV-510003-A",
-                "IDEM-DUPLICATE",
-                authorization,
-                new BigDecimal("20.00"),
-                ReversalStatus.COMPLETED
-        ));
-
-        AuthorizationReversal duplicate = new AuthorizationReversal(
-                "REV-510003-B",
-                "IDEM-DUPLICATE",
-                authorization,
-                new BigDecimal("20.00"),
-                ReversalStatus.COMPLETED
-        );
-
-        assertThatThrownBy(() -> reversalRepository.saveAndFlush(duplicate))
-                .isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    void shouldSupportAllAuthorizationStatusesAndSuccessfulV7Migration() {
+    void shouldSupportAllAuthorizationStatusesAndSuccessfulV8Migration() {
         for (AuthorizationStatus status : AuthorizationStatus.values()) {
-            persistAuthorization("5101" + status.ordinal(), status);
+            persistAuthorization("6101" + status.ordinal(), status);
         }
 
         entityManager.flush();
@@ -169,19 +150,11 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
                         AuthorizationStatus.REVERSED,
                         AuthorizationStatus.CLEARED
                 );
-        Integer appliedV7 = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '7' AND success",
+        Integer appliedV8 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '8' AND success",
                 Integer.class
         );
-        assertThat(appliedV7).isEqualTo(1);
-
-        String nullable = jdbcTemplate.queryForObject(
-                "SELECT is_nullable FROM information_schema.columns "
-                        + "WHERE table_name = 'authorization_reversals' "
-                        + "AND column_name = 'idempotency_key'",
-                String.class
-        );
-        assertThat(nullable).isEqualTo("NO");
+        assertThat(appliedV8).isEqualTo(1);
     }
 
     private Authorization persistAuthorization(String suffix, AuthorizationStatus status) {
@@ -207,8 +180,8 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
 
         Merchant merchant = new Merchant(
                 "MER-" + suffix,
-                "Reversal Test Merchant " + suffix,
-                "Reversal Merchant " + suffix,
+                "Clearing Test Merchant " + suffix,
+                "Clearing Merchant " + suffix,
                 "5411",
                 "US",
                 MerchantStatus.ACTIVE

@@ -4,5 +4,6 @@ public enum AuthorizationStatus {
     PENDING,
     APPROVED,
     DECLINED,
-    REVERSED
+    REVERSED,
+    CLEARED
 }
