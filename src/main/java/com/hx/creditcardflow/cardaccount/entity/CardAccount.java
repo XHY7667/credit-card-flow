@@ -100,6 +100,15 @@ public class CardAccount {
         this.status = status;
     }
 
+    public boolean reserveCredit(BigDecimal amount) {
+        if (availableCredit.compareTo(amount) < 0) {
+            return false;
+        }
+
+        availableCredit = availableCredit.subtract(amount);
+        return true;
+    }
+
     public Long getId() {
         return id;
     }
