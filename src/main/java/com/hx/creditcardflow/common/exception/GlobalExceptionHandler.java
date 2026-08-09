@@ -11,11 +11,17 @@ import com.hx.creditcardflow.cardaccount.exception.DuplicateCardAccountNumberExc
 import com.hx.creditcardflow.cardaccount.exception.InvalidCardAccountCreditLimitException;
 import com.hx.creditcardflow.merchant.exception.DuplicateMerchantCodeException;
 import com.hx.creditcardflow.merchant.exception.MerchantNotFoundException;
+import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceException;
+import com.hx.creditcardflow.reversal.exception.IdempotencyKeyConflictException;
+import com.hx.creditcardflow.reversal.exception.ReversalAmountMismatchException;
+import com.hx.creditcardflow.reversal.exception.ReversalNotAllowedException;
+import com.hx.creditcardflow.reversal.exception.ReversalNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -25,6 +31,47 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ReversalNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleReversalNotFound(
+            ReversalNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler({
+            DuplicateReversalReferenceException.class,
+            IdempotencyKeyConflictException.class,
+            ReversalNotAllowedException.class,
+            ReversalAmountMismatchException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleReversalConflict(
+            RuntimeException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingRequestHeader(
+            MissingRequestHeaderException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiErrorResponse> handleIllegalArgument(
+            IllegalArgumentException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
 
     @ExceptionHandler(AuthorizationNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthorizationNotFound(

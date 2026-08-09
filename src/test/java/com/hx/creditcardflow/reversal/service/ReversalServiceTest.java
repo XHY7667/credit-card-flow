@@ -20,6 +20,7 @@ import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceExcept
 import com.hx.creditcardflow.reversal.exception.IdempotencyKeyConflictException;
 import com.hx.creditcardflow.reversal.exception.ReversalAmountMismatchException;
 import com.hx.creditcardflow.reversal.exception.ReversalNotAllowedException;
+import com.hx.creditcardflow.reversal.exception.ReversalNotFoundException;
 import com.hx.creditcardflow.reversal.repository.AuthorizationReversalRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -329,6 +330,29 @@ class ReversalServiceTest {
                 .hasMessage("Idempotency key must be present and not exceed 100 characters");
 
         verify(reversalRepository, never()).findByIdempotencyKey(any(String.class));
+    }
+
+    @Test
+    void getExistingReversalReturnsResponse() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByReversalReference("REV-530001"))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+
+        ReversalResponse response = reversalService.getReversal("REV-530001");
+
+        assertThat(response.reversalReference()).isEqualTo("REV-530001");
+        assertThat(response.authorizationReference()).isEqualTo("AUTH-530001");
+        assertThat(response.status()).isEqualTo(ReversalStatus.COMPLETED);
+    }
+
+    @Test
+    void getMissingReversalThrowsNotFound() {
+        when(reversalRepository.findByReversalReference("REV-NOT-FOUND"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reversalService.getReversal("REV-NOT-FOUND"))
+                .isInstanceOf(ReversalNotFoundException.class)
+                .hasMessage("Reversal not found with reversal reference: REV-NOT-FOUND");
     }
 
     private AuthorizationReversal reverse(Fixture fixture, ReversalCreateRequest request) {
