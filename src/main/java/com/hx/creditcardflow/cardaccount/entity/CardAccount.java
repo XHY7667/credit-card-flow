@@ -109,6 +109,15 @@ public class CardAccount {
         return true;
     }
 
+    public void releaseCredit(BigDecimal amount) {
+        BigDecimal committedExposure = creditLimit.subtract(availableCredit);
+        if (amount.compareTo(committedExposure) > 0) {
+            throw new IllegalArgumentException("Release amount exceeds committed credit exposure");
+        }
+
+        availableCredit = availableCredit.add(amount);
+    }
+
     public Long getId() {
         return id;
     }
