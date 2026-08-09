@@ -83,6 +83,7 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
         Authorization authorization = persistAuthorization("510001", AuthorizationStatus.APPROVED);
         AuthorizationReversal reversal = reversalRepository.saveAndFlush(new AuthorizationReversal(
                 "REV-510001",
+                "IDEM-510001",
                 authorization,
                 new BigDecimal("125.75"),
                 ReversalStatus.PENDING
@@ -94,6 +95,9 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
 
         AuthorizationReversal persisted = reversalRepository.findById(reversalId).orElseThrow();
         assertThat(persisted.getReversalReference()).isEqualTo("REV-510001");
+        assertThat(persisted.getIdempotencyKey()).isEqualTo("IDEM-510001");
+        assertThat(reversalRepository.findByIdempotencyKey("IDEM-510001"))
+                .contains(persisted);
         assertThat(persisted.getAuthorization().getId()).isEqualTo(authorizationId);
         assertThat(persisted.getAuthorization().getAuthorizationReference()).isEqualTo("AUTH-510001");
         assertThat(persisted.getAmount()).isEqualByComparingTo("125.75");
@@ -107,6 +111,7 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
         Authorization authorization = persistAuthorization("510002", AuthorizationStatus.APPROVED);
         reversalRepository.saveAndFlush(new AuthorizationReversal(
                 "REV-DUPLICATE",
+                "IDEM-510002-A",
                 authorization,
                 new BigDecimal("20.00"),
                 ReversalStatus.COMPLETED
@@ -114,6 +119,7 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
 
         AuthorizationReversal duplicate = new AuthorizationReversal(
                 "REV-DUPLICATE",
+                "IDEM-510002-B",
                 authorization,
                 new BigDecimal("20.00"),
                 ReversalStatus.PENDING
@@ -124,7 +130,30 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
     }
 
     @Test
-    void shouldSupportAllAuthorizationStatusesAndSuccessfulV6Migration() {
+    void shouldEnforceUniqueIdempotencyKey() {
+        Authorization authorization = persistAuthorization("510003", AuthorizationStatus.APPROVED);
+        reversalRepository.saveAndFlush(new AuthorizationReversal(
+                "REV-510003-A",
+                "IDEM-DUPLICATE",
+                authorization,
+                new BigDecimal("20.00"),
+                ReversalStatus.COMPLETED
+        ));
+
+        AuthorizationReversal duplicate = new AuthorizationReversal(
+                "REV-510003-B",
+                "IDEM-DUPLICATE",
+                authorization,
+                new BigDecimal("20.00"),
+                ReversalStatus.COMPLETED
+        );
+
+        assertThatThrownBy(() -> reversalRepository.saveAndFlush(duplicate))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shouldSupportAllAuthorizationStatusesAndSuccessfulV7Migration() {
         for (AuthorizationStatus status : AuthorizationStatus.values()) {
             persistAuthorization("5101" + status.ordinal(), status);
         }
@@ -139,11 +168,19 @@ class AuthorizationReversalPostgreSqlIntegrationTest {
                         AuthorizationStatus.DECLINED,
                         AuthorizationStatus.REVERSED
                 );
-        Integer appliedV6 = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '6' AND success",
+        Integer appliedV7 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '7' AND success",
                 Integer.class
         );
-        assertThat(appliedV6).isEqualTo(1);
+        assertThat(appliedV7).isEqualTo(1);
+
+        String nullable = jdbcTemplate.queryForObject(
+                "SELECT is_nullable FROM information_schema.columns "
+                        + "WHERE table_name = 'authorization_reversals' "
+                        + "AND column_name = 'idempotency_key'",
+                String.class
+        );
+        assertThat(nullable).isEqualTo("NO");
     }
 
     private Authorization persistAuthorization(String suffix, AuthorizationStatus status) {
