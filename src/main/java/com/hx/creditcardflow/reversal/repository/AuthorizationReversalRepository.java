@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface AuthorizationReversalRepository extends JpaRepository<AuthorizationReversal, Long> {
 
     Optional<AuthorizationReversal> findByReversalReference(String reversalReference);
+
+    Optional<AuthorizationReversal> findByIdempotencyKey(String idempotencyKey);
 }

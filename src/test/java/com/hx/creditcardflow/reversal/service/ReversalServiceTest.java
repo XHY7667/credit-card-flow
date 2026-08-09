@@ -17,6 +17,7 @@ import com.hx.creditcardflow.reversal.dto.ReversalResponse;
 import com.hx.creditcardflow.reversal.entity.AuthorizationReversal;
 import com.hx.creditcardflow.reversal.entity.ReversalStatus;
 import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceException;
+import com.hx.creditcardflow.reversal.exception.IdempotencyKeyConflictException;
 import com.hx.creditcardflow.reversal.exception.ReversalAmountMismatchException;
 import com.hx.creditcardflow.reversal.exception.ReversalNotAllowedException;
 import com.hx.creditcardflow.reversal.repository.AuthorizationReversalRepository;
@@ -110,7 +111,7 @@ class ReversalServiceTest {
         when(authorizationRepository.findByAuthorizationReference(request.authorizationReference()))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> reversalService.createReversal(request))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), request))
                 .isInstanceOf(AuthorizationNotFoundException.class)
                 .hasMessage("Authorization not found with authorization reference: AUTH-530001");
         verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
@@ -123,7 +124,7 @@ class ReversalServiceTest {
         when(reversalRepository.findByReversalReference(request.reversalReference()))
                 .thenReturn(Optional.of(reversal(request, fixture.authorization())));
 
-        assertThatThrownBy(() -> reversalService.createReversal(request))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), request))
                 .isInstanceOf(DuplicateReversalReferenceException.class)
                 .hasMessage("Reversal reference already exists: REV-530001");
         verify(authorizationRepository, never()).findByAuthorizationReference(any(String.class));
@@ -171,7 +172,7 @@ class ReversalServiceTest {
         Fixture fixture = fixture(AuthorizationStatus.DECLINED);
         stubLookup(fixture, validRequest());
 
-        assertThatThrownBy(() -> reversalService.createReversal(validRequest()))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), validRequest()))
                 .isInstanceOf(ReversalNotAllowedException.class);
         assertThat(fixture.cardAccount().getAvailableCredit()).isEqualByComparingTo("6874.25");
     }
@@ -182,7 +183,7 @@ class ReversalServiceTest {
         ReversalCreateRequest request = requestWithAmount("100.00");
         stubLookup(fixture, request);
 
-        assertThatThrownBy(() -> reversalService.createReversal(request))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), request))
                 .isInstanceOf(ReversalAmountMismatchException.class);
         verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
     }
@@ -202,13 +203,141 @@ class ReversalServiceTest {
         assertThat(fixture.cardAccount().getAvailableCredit()).isEqualByComparingTo("7000.00");
     }
 
+    @Test
+    void successfulReversalStoresIdempotencyKey() {
+        AuthorizationReversal saved = reverse(fixture(AuthorizationStatus.APPROVED), validRequest());
+
+        assertThat(saved.getIdempotencyKey()).isEqualTo(idempotencyKey());
+    }
+
+    @Test
+    void sameKeyAndLogicalRequestReturnsExistingResponse() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        AuthorizationReversal existing = reversal(validRequest(), fixture.authorization());
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.of(existing));
+
+        ReversalResponse response = reversalService.createReversal(idempotencyKey(), validRequest());
+
+        assertThat(response.reversalReference()).isEqualTo("REV-530001");
+        assertThat(response.authorizationReference()).isEqualTo("AUTH-530001");
+        assertThat(response.amount()).isEqualByComparingTo("125.75");
+        assertThat(response.status()).isEqualTo(ReversalStatus.COMPLETED);
+    }
+
+    @Test
+    void replayDoesNotReleaseCreditAgain() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+
+        reversalService.createReversal(idempotencyKey(), validRequest());
+
+        assertThat(fixture.cardAccount().getAvailableCredit()).isEqualByComparingTo("6874.25");
+    }
+
+    @Test
+    void replayDoesNotPersistAnotherReversalOrRequireApprovedAuthorization() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+
+        reversalService.createReversal(idempotencyKey(), validRequest());
+
+        verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+        verify(authorizationRepository, never()).findByAuthorizationReference(any(String.class));
+        verify(authorizationRepository, never()).save(any(Authorization.class));
+    }
+
+    @Test
+    void sameKeyWithDifferentReversalReferenceConflicts() {
+        assertIdempotencyConflict(new ReversalCreateRequest(
+                "REV-DIFFERENT", "AUTH-530001", new BigDecimal("125.75")
+        ));
+    }
+
+    @Test
+    void sameKeyWithDifferentAuthorizationReferenceConflicts() {
+        assertIdempotencyConflict(new ReversalCreateRequest(
+                "REV-530001", "AUTH-DIFFERENT", new BigDecimal("125.75")
+        ));
+    }
+
+    @Test
+    void sameKeyWithDifferentAmountConflicts() {
+        assertIdempotencyConflict(requestWithAmount("125.76"));
+    }
+
+    @Test
+    void replayAcceptsNumericallyEqualAmountWithDifferentScale() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+        ReversalCreateRequest scaledRequest = requestWithAmount("125.750");
+
+        ReversalResponse response = reversalService.createReversal(idempotencyKey(), scaledRequest);
+
+        assertThat(response.amount()).isEqualByComparingTo("125.75");
+        verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+    }
+
+    @Test
+    void differentKeyWithSameReversalReferenceRetainsDuplicateBehavior() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByIdempotencyKey("IDEM-DIFFERENT"))
+                .thenReturn(Optional.empty());
+        when(reversalRepository.findByReversalReference("REV-530001"))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+
+        assertThatThrownBy(() -> reversalService.createReversal("IDEM-DIFFERENT", validRequest()))
+                .isInstanceOf(DuplicateReversalReferenceException.class);
+    }
+
+    @Test
+    void differentKeyAndReferenceAgainstReversedAuthorizationIsNotAllowed() {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        ReversalCreateRequest request = new ReversalCreateRequest(
+                "REV-NEW", "AUTH-530001", new BigDecimal("125.75")
+        );
+        when(reversalRepository.findByIdempotencyKey("IDEM-DIFFERENT"))
+                .thenReturn(Optional.empty());
+        when(reversalRepository.findByReversalReference("REV-NEW"))
+                .thenReturn(Optional.empty());
+        when(authorizationRepository.findByAuthorizationReference("AUTH-530001"))
+                .thenReturn(Optional.of(fixture.authorization()));
+
+        assertThatThrownBy(() -> reversalService.createReversal("IDEM-DIFFERENT", request))
+                .isInstanceOf(ReversalNotAllowedException.class);
+        verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+    }
+
+    @Test
+    void failedInitialValidationDoesNotPersistIdempotencyResult() {
+        Fixture fixture = fixture(AuthorizationStatus.DECLINED);
+        stubLookup(fixture, validRequest());
+
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), validRequest()))
+                .isInstanceOf(ReversalNotAllowedException.class);
+
+        verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+    }
+
+    @Test
+    void blankIdempotencyKeyIsRejectedBeforeRepositoryAccess() {
+        assertThatThrownBy(() -> reversalService.createReversal(" ", validRequest()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Idempotency key must be present and not exceed 100 characters");
+
+        verify(reversalRepository, never()).findByIdempotencyKey(any(String.class));
+    }
+
     private AuthorizationReversal reverse(Fixture fixture, ReversalCreateRequest request) {
         stubLookup(fixture, request);
         when(authorizationRepository.save(fixture.authorization())).thenReturn(fixture.authorization());
         when(reversalRepository.save(any(AuthorizationReversal.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        ReversalResponse response = reversalService.createReversal(request);
+        ReversalResponse response = reversalService.createReversal(idempotencyKey(), request);
 
         ArgumentCaptor<AuthorizationReversal> captor = ArgumentCaptor.forClass(AuthorizationReversal.class);
         verify(reversalRepository).save(captor.capture());
@@ -217,6 +346,8 @@ class ReversalServiceTest {
     }
 
     private void stubLookup(Fixture fixture, ReversalCreateRequest request) {
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.empty());
         when(reversalRepository.findByReversalReference(request.reversalReference()))
                 .thenReturn(Optional.empty());
         when(authorizationRepository.findByAuthorizationReference(request.authorizationReference()))
@@ -228,7 +359,7 @@ class ReversalServiceTest {
         ReversalCreateRequest request = validRequest();
         stubLookup(fixture, request);
 
-        assertThatThrownBy(() -> reversalService.createReversal(request))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), request))
                 .isInstanceOf(ReversalNotAllowedException.class)
                 .hasMessage("Authorization cannot be reversed: AUTH-530001 with status " + status);
         verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
@@ -239,11 +370,25 @@ class ReversalServiceTest {
         ReversalCreateRequest request = requestWithAmount(amount);
         stubLookup(fixture, request);
 
-        assertThatThrownBy(() -> reversalService.createReversal(request))
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), request))
                 .isInstanceOf(ReversalAmountMismatchException.class)
                 .hasMessage("Reversal amount " + amount + " must equal authorization amount 125.75");
         assertThat(fixture.cardAccount().getAvailableCredit()).isEqualByComparingTo("6874.25");
         verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+    }
+
+    private void assertIdempotencyConflict(ReversalCreateRequest incomingRequest) {
+        Fixture fixture = fixture(AuthorizationStatus.REVERSED);
+        when(reversalRepository.findByIdempotencyKey(idempotencyKey()))
+                .thenReturn(Optional.of(reversal(validRequest(), fixture.authorization())));
+
+        assertThatThrownBy(() -> reversalService.createReversal(idempotencyKey(), incomingRequest))
+                .isInstanceOf(IdempotencyKeyConflictException.class)
+                .hasMessage("Idempotency key was already used for a different reversal request: "
+                        + idempotencyKey());
+
+        verify(reversalRepository, never()).save(any(AuthorizationReversal.class));
+        verify(authorizationRepository, never()).findByAuthorizationReference(any(String.class));
     }
 
     private static Fixture fixture(AuthorizationStatus status) {
@@ -311,6 +456,7 @@ class ReversalServiceTest {
     ) {
         return new AuthorizationReversal(
                 request.reversalReference(),
+                idempotencyKey(),
                 authorization,
                 request.amount(),
                 ReversalStatus.COMPLETED
@@ -319,6 +465,10 @@ class ReversalServiceTest {
 
     private static BigDecimal committedExposure(CardAccount cardAccount) {
         return cardAccount.getCreditLimit().subtract(cardAccount.getAvailableCredit());
+    }
+
+    private static String idempotencyKey() {
+        return "IDEM-530001";
     }
 
     private record Fixture(CardAccount cardAccount, Authorization authorization) {

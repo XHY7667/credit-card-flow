@@ -10,6 +10,7 @@ import com.hx.creditcardflow.reversal.dto.ReversalResponse;
 import com.hx.creditcardflow.reversal.entity.AuthorizationReversal;
 import com.hx.creditcardflow.reversal.entity.ReversalStatus;
 import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceException;
+import com.hx.creditcardflow.reversal.exception.IdempotencyKeyConflictException;
 import com.hx.creditcardflow.reversal.exception.ReversalAmountMismatchException;
 import com.hx.creditcardflow.reversal.exception.ReversalNotAllowedException;
 import com.hx.creditcardflow.reversal.repository.AuthorizationReversalRepository;
@@ -32,7 +33,18 @@ public class ReversalService {
     }
 
     @Transactional
-    public ReversalResponse createReversal(ReversalCreateRequest request) {
+    public ReversalResponse createReversal(String idempotencyKey, ReversalCreateRequest request) {
+        validateIdempotencyKey(idempotencyKey);
+
+        AuthorizationReversal existing = reversalRepository.findByIdempotencyKey(idempotencyKey)
+                .orElse(null);
+        if (existing != null) {
+            if (!matches(existing, request)) {
+                throw new IdempotencyKeyConflictException(idempotencyKey);
+            }
+            return toResponse(existing);
+        }
+
         if (reversalRepository.findByReversalReference(request.reversalReference()).isPresent()) {
             throw new DuplicateReversalReferenceException(request.reversalReference());
         }
@@ -59,12 +71,26 @@ public class ReversalService {
 
         AuthorizationReversal reversal = new AuthorizationReversal(
                 request.reversalReference(),
+                idempotencyKey,
                 authorization,
                 request.amount(),
                 ReversalStatus.COMPLETED
         );
 
         return toResponse(reversalRepository.save(reversal));
+    }
+
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
+            throw new IllegalArgumentException("Idempotency key must be present and not exceed 100 characters");
+        }
+    }
+
+    private boolean matches(AuthorizationReversal reversal, ReversalCreateRequest request) {
+        return reversal.getReversalReference().equals(request.reversalReference())
+                && reversal.getAuthorization().getAuthorizationReference()
+                .equals(request.authorizationReference())
+                && reversal.getAmount().compareTo(request.amount()) == 0;
     }
 
     private ReversalResponse toResponse(AuthorizationReversal reversal) {

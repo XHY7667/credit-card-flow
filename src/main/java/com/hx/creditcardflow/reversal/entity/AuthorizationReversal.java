@@ -22,10 +22,16 @@ import java.time.Instant;
 @Entity
 @Table(
         name = "authorization_reversals",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_authorization_reversals_reversal_reference",
-                columnNames = "reversal_reference"
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_authorization_reversals_reversal_reference",
+                        columnNames = "reversal_reference"
+                ),
+                @UniqueConstraint(
+                        name = "uk_authorization_reversals_idempotency_key",
+                        columnNames = "idempotency_key"
+                )
+        }
 )
 public class AuthorizationReversal {
 
@@ -35,6 +41,9 @@ public class AuthorizationReversal {
 
     @Column(name = "reversal_reference", nullable = false, length = 50)
     private String reversalReference;
+
+    @Column(name = "idempotency_key", nullable = false, length = 100)
+    private String idempotencyKey;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "authorization_id", nullable = false)
@@ -58,11 +67,13 @@ public class AuthorizationReversal {
 
     public AuthorizationReversal(
             String reversalReference,
+            String idempotencyKey,
             Authorization authorization,
             BigDecimal amount,
             ReversalStatus status
     ) {
         this.reversalReference = reversalReference;
+        this.idempotencyKey = idempotencyKey;
         this.authorization = authorization;
         this.amount = amount;
         this.status = status;
@@ -86,6 +97,10 @@ public class AuthorizationReversal {
 
     public String getReversalReference() {
         return reversalReference;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
     }
 
     public Authorization getAuthorization() {
