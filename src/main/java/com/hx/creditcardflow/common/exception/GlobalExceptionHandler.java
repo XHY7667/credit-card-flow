@@ -1,5 +1,7 @@
 package com.hx.creditcardflow.common.exception;
 
+import com.hx.creditcardflow.authorization.exception.AuthorizationNotFoundException;
+import com.hx.creditcardflow.authorization.exception.DuplicateAuthorizationReferenceException;
 import com.hx.creditcardflow.card.exception.CardAccountNotEligibleForCardIssuanceException;
 import com.hx.creditcardflow.card.exception.CardNotFoundException;
 import com.hx.creditcardflow.card.exception.DuplicateCardReferenceException;
@@ -23,6 +25,32 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuthorizationNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthorizationNotFound(
+            AuthorizationNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(DuplicateAuthorizationReferenceException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateAuthorizationReference(
+            DuplicateAuthorizationReferenceException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                exception.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+    }
 
     @ExceptionHandler(CardNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleCardNotFound(
