@@ -13,6 +13,7 @@ import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceExcept
 import com.hx.creditcardflow.reversal.exception.IdempotencyKeyConflictException;
 import com.hx.creditcardflow.reversal.exception.ReversalAmountMismatchException;
 import com.hx.creditcardflow.reversal.exception.ReversalNotAllowedException;
+import com.hx.creditcardflow.reversal.exception.ReversalNotFoundException;
 import com.hx.creditcardflow.reversal.repository.AuthorizationReversalRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,6 +79,12 @@ public class ReversalService {
         );
 
         return toResponse(reversalRepository.save(reversal));
+    }
+
+    public ReversalResponse getReversal(String reversalReference) {
+        return reversalRepository.findByReversalReference(reversalReference)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ReversalNotFoundException(reversalReference));
     }
 
     private void validateIdempotencyKey(String idempotencyKey) {
