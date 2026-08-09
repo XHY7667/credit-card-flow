@@ -6,6 +6,7 @@ import com.hx.creditcardflow.authorization.entity.Authorization;
 import com.hx.creditcardflow.authorization.entity.AuthorizationChannel;
 import com.hx.creditcardflow.authorization.entity.AuthorizationStatus;
 import com.hx.creditcardflow.authorization.entity.AuthorizationType;
+import com.hx.creditcardflow.authorization.exception.AuthorizationNotFoundException;
 import com.hx.creditcardflow.authorization.exception.DuplicateAuthorizationReferenceException;
 import com.hx.creditcardflow.authorization.repository.AuthorizationRepository;
 import com.hx.creditcardflow.card.entity.Card;
@@ -204,6 +205,31 @@ class AuthorizationServiceTest {
 
         assertThat(saved.getCard()).isSameAs(fixture.card());
         assertThat(saved.getMerchant()).isSameAs(fixture.merchant());
+    }
+
+    @Test
+    void getExistingAuthorizationReturnsExpectedResponse() {
+        Fixture fixture = eligibleFixture();
+        Authorization authorization = authorization(validRequest(), fixture, AuthorizationStatus.APPROVED);
+        when(authorizationRepository.findByAuthorizationReference("AUTH-430001"))
+                .thenReturn(Optional.of(authorization));
+
+        AuthorizationResponse response = authorizationService.getAuthorization("AUTH-430001");
+
+        assertThat(response.authorizationReference()).isEqualTo("AUTH-430001");
+        assertThat(response.cardReference()).isEqualTo("CARD-430001");
+        assertThat(response.merchantCode()).isEqualTo("MER-430001");
+        assertThat(response.status()).isEqualTo(AuthorizationStatus.APPROVED);
+    }
+
+    @Test
+    void getMissingAuthorizationThrowsNotFoundException() {
+        when(authorizationRepository.findByAuthorizationReference("AUTH-NOT-FOUND"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authorizationService.getAuthorization("AUTH-NOT-FOUND"))
+                .isInstanceOf(AuthorizationNotFoundException.class)
+                .hasMessage("Authorization not found with authorization reference: AUTH-NOT-FOUND");
     }
 
     private Authorization authorize(Fixture fixture, AuthorizationCreateRequest request) {

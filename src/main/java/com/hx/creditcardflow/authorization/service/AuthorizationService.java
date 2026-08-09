@@ -5,6 +5,7 @@ import com.hx.creditcardflow.authorization.dto.AuthorizationResponse;
 import com.hx.creditcardflow.authorization.entity.Authorization;
 import com.hx.creditcardflow.authorization.entity.AuthorizationStatus;
 import com.hx.creditcardflow.authorization.exception.DuplicateAuthorizationReferenceException;
+import com.hx.creditcardflow.authorization.exception.AuthorizationNotFoundException;
 import com.hx.creditcardflow.authorization.repository.AuthorizationRepository;
 import com.hx.creditcardflow.card.entity.Card;
 import com.hx.creditcardflow.card.entity.CardStatus;
@@ -70,6 +71,13 @@ public class AuthorizationService {
         );
 
         return toResponse(authorizationRepository.save(authorization));
+    }
+
+    public AuthorizationResponse getAuthorization(String authorizationReference) {
+        Authorization authorization = authorizationRepository
+                .findByAuthorizationReference(authorizationReference)
+                .orElseThrow(() -> new AuthorizationNotFoundException(authorizationReference));
+        return toResponse(authorization);
     }
 
     private boolean isExpired(Card card) {
