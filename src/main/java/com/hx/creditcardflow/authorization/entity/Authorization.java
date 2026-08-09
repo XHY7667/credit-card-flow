@@ -104,6 +104,10 @@ public class Authorization {
         updatedAt = Instant.now();
     }
 
+    public void markReversed() {
+        status = AuthorizationStatus.REVERSED;
+    }
+
     public Long getId() {
         return id;
     }
