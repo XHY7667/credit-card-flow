@@ -108,6 +108,10 @@ public class Authorization {
         status = AuthorizationStatus.REVERSED;
     }
 
+    public void markCleared() {
+        status = AuthorizationStatus.CLEARED;
+    }
+
     public Long getId() {
         return id;
     }
