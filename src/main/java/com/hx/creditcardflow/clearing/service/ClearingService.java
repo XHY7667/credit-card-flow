@@ -1,0 +1,94 @@
+package com.hx.creditcardflow.clearing.service;
+
+import com.hx.creditcardflow.authorization.entity.Authorization;
+import com.hx.creditcardflow.authorization.entity.AuthorizationStatus;
+import com.hx.creditcardflow.authorization.exception.AuthorizationNotFoundException;
+import com.hx.creditcardflow.authorization.repository.AuthorizationRepository;
+import com.hx.creditcardflow.cardaccount.entity.CardAccount;
+import com.hx.creditcardflow.clearing.dto.ClearingCreateRequest;
+import com.hx.creditcardflow.clearing.dto.ClearingResponse;
+import com.hx.creditcardflow.clearing.entity.Clearing;
+import com.hx.creditcardflow.clearing.entity.ClearingStatus;
+import com.hx.creditcardflow.clearing.exception.ClearingAmountMismatchException;
+import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchException;
+import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
+import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
+import com.hx.creditcardflow.clearing.repository.ClearingRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Transactional(readOnly = true)
+public class ClearingService {
+
+    private final ClearingRepository clearingRepository;
+    private final AuthorizationRepository authorizationRepository;
+
+    public ClearingService(
+            ClearingRepository clearingRepository,
+            AuthorizationRepository authorizationRepository
+    ) {
+        this.clearingRepository = clearingRepository;
+        this.authorizationRepository = authorizationRepository;
+    }
+
+    @Transactional
+    public ClearingResponse createClearing(ClearingCreateRequest request) {
+        if (clearingRepository.findByClearingReference(request.clearingReference()).isPresent()) {
+            throw new DuplicateClearingReferenceException(request.clearingReference());
+        }
+
+        Authorization authorization = authorizationRepository
+                .findByAuthorizationReference(request.authorizationReference())
+                .orElseThrow(() -> new AuthorizationNotFoundException(
+                        request.authorizationReference()
+                ));
+
+        if (authorization.getStatus() != AuthorizationStatus.APPROVED) {
+            throw new ClearingNotAllowedException(
+                    authorization.getAuthorizationReference(),
+                    authorization.getStatus()
+            );
+        }
+
+        if (request.amount().compareTo(authorization.getAmount()) != 0) {
+            throw new ClearingAmountMismatchException(
+                    request.amount(), authorization.getAmount()
+            );
+        }
+
+        if (!request.currencyCode().equals(authorization.getCurrencyCode())) {
+            throw new ClearingCurrencyMismatchException(
+                    request.currencyCode(), authorization.getCurrencyCode()
+            );
+        }
+
+        CardAccount cardAccount = authorization.getCard().getCardAccount();
+        cardAccount.postClearing(request.amount());
+        authorization.markCleared();
+        authorizationRepository.save(authorization);
+
+        Clearing clearing = new Clearing(
+                request.clearingReference(),
+                authorization,
+                request.amount(),
+                request.currencyCode(),
+                ClearingStatus.POSTED
+        );
+
+        return toResponse(clearingRepository.save(clearing));
+    }
+
+    private ClearingResponse toResponse(Clearing clearing) {
+        return new ClearingResponse(
+                clearing.getId(),
+                clearing.getClearingReference(),
+                clearing.getAuthorization().getAuthorizationReference(),
+                clearing.getAmount(),
+                clearing.getCurrencyCode(),
+                clearing.getStatus(),
+                clearing.getCreatedAt(),
+                clearing.getUpdatedAt()
+        );
+    }
+}

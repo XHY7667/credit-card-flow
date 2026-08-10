@@ -118,6 +118,19 @@ public class CardAccount {
         availableCredit = availableCredit.add(amount);
     }
 
+    public void postClearing(BigDecimal amount) {
+        BigDecimal pendingAuthorizationExposure = creditLimit
+                .subtract(availableCredit)
+                .subtract(currentBalance);
+        if (amount.compareTo(pendingAuthorizationExposure) > 0) {
+            throw new IllegalArgumentException(
+                    "Clearing amount exceeds pending authorization exposure"
+            );
+        }
+
+        currentBalance = currentBalance.add(amount);
+    }
+
     public Long getId() {
         return id;
     }

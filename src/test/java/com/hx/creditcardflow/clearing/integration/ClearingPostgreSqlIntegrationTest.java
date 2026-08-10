@@ -86,7 +86,7 @@ class ClearingPostgreSqlIntegrationTest {
                 authorization,
                 new BigDecimal("125.75"),
                 "USD",
-                ClearingStatus.PENDING
+                ClearingStatus.POSTED
         ));
         Long clearingId = clearing.getId();
         Long authorizationId = authorization.getId();
@@ -100,7 +100,7 @@ class ClearingPostgreSqlIntegrationTest {
         assertThat(persisted.getAuthorization().getAuthorizationReference()).isEqualTo("AUTH-610001");
         assertThat(persisted.getAmount()).isEqualByComparingTo("125.75");
         assertThat(persisted.getCurrencyCode()).isEqualTo("USD");
-        assertThat(persisted.getStatus()).isEqualTo(ClearingStatus.PENDING);
+        assertThat(persisted.getStatus()).isEqualTo(ClearingStatus.POSTED);
         assertThat(persisted.getCreatedAt()).isNotNull();
         assertThat(persisted.getUpdatedAt()).isEqualTo(persisted.getCreatedAt());
 
@@ -134,7 +134,7 @@ class ClearingPostgreSqlIntegrationTest {
     }
 
     @Test
-    void shouldSupportAllAuthorizationStatusesAndSuccessfulV8Migration() {
+    void shouldSupportAllAuthorizationStatusesAndSuccessfulV9Migration() {
         for (AuthorizationStatus status : AuthorizationStatus.values()) {
             persistAuthorization("6101" + status.ordinal(), status);
         }
@@ -150,11 +150,11 @@ class ClearingPostgreSqlIntegrationTest {
                         AuthorizationStatus.REVERSED,
                         AuthorizationStatus.CLEARED
                 );
-        Integer appliedV8 = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '8' AND success",
+        Integer appliedV9 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '9' AND success",
                 Integer.class
         );
-        assertThat(appliedV8).isEqualTo(1);
+        assertThat(appliedV9).isEqualTo(1);
     }
 
     private Authorization persistAuthorization(String suffix, AuthorizationStatus status) {
