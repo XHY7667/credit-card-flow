@@ -9,6 +9,11 @@ import com.hx.creditcardflow.card.exception.InvalidCardExpirationException;
 import com.hx.creditcardflow.cardaccount.exception.CardAccountNotFoundException;
 import com.hx.creditcardflow.cardaccount.exception.DuplicateCardAccountNumberException;
 import com.hx.creditcardflow.cardaccount.exception.InvalidCardAccountCreditLimitException;
+import com.hx.creditcardflow.clearing.exception.ClearingAmountMismatchException;
+import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchException;
+import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
+import com.hx.creditcardflow.clearing.exception.ClearingNotFoundException;
+import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
 import com.hx.creditcardflow.merchant.exception.DuplicateMerchantCodeException;
 import com.hx.creditcardflow.merchant.exception.MerchantNotFoundException;
 import com.hx.creditcardflow.reversal.exception.DuplicateReversalReferenceException;
@@ -31,6 +36,29 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ClearingNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleClearingNotFound(
+            ClearingNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler({
+            DuplicateClearingReferenceException.class,
+            ClearingNotAllowedException.class,
+            ClearingAmountMismatchException.class,
+            ClearingCurrencyMismatchException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleClearingConflict(
+            RuntimeException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.CONFLICT, exception.getMessage(),
+                request.getRequestURI(), null);
+    }
 
     @ExceptionHandler(ReversalNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleReversalNotFound(
