@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,6 +29,16 @@ class ActuatorIntegrationTest {
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.names", hasItems(
+                        "creditcardflow.authorization.approved",
+                        "creditcardflow.authorization.declined",
+                        "creditcardflow.reversal.completed",
+                        "creditcardflow.clearing.posted"
+                )));
+
+        mockMvc.perform(get(
+                        "/actuator/metrics/creditcardflow.authorization.approved"))
                 .andExpect(status().isOk());
     }
 }
