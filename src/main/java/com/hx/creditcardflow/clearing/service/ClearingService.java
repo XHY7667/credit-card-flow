@@ -12,6 +12,7 @@ import com.hx.creditcardflow.clearing.entity.ClearingStatus;
 import com.hx.creditcardflow.clearing.exception.ClearingAmountMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
+import com.hx.creditcardflow.clearing.exception.ClearingNotFoundException;
 import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
 import com.hx.creditcardflow.clearing.repository.ClearingRepository;
 import org.springframework.stereotype.Service;
@@ -77,6 +78,12 @@ public class ClearingService {
         );
 
         return toResponse(clearingRepository.save(clearing));
+    }
+
+    public ClearingResponse getClearing(String clearingReference) {
+        return clearingRepository.findByClearingReference(clearingReference)
+                .map(this::toResponse)
+                .orElseThrow(() -> new ClearingNotFoundException(clearingReference));
     }
 
     private ClearingResponse toResponse(Clearing clearing) {

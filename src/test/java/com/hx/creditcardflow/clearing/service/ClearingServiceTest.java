@@ -17,6 +17,7 @@ import com.hx.creditcardflow.clearing.entity.ClearingStatus;
 import com.hx.creditcardflow.clearing.exception.ClearingAmountMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
+import com.hx.creditcardflow.clearing.exception.ClearingNotFoundException;
 import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
 import com.hx.creditcardflow.clearing.repository.ClearingRepository;
 import com.hx.creditcardflow.merchant.entity.Merchant;
@@ -200,6 +201,29 @@ class ClearingServiceTest {
 
         assertThat(response.status()).isEqualTo(ClearingStatus.POSTED);
         assertThat(fixture.cardAccount().getCurrentBalance()).isEqualByComparingTo("2125.75");
+    }
+
+    @Test
+    void getExistingClearingReturnsResponse() {
+        Fixture fixture = activeFixture(AuthorizationStatus.CLEARED);
+        when(clearingRepository.findByClearingReference("CLR-630001"))
+                .thenReturn(Optional.of(clearing(fixture.authorization())));
+
+        ClearingResponse response = clearingService.getClearing("CLR-630001");
+
+        assertThat(response.clearingReference()).isEqualTo("CLR-630001");
+        assertThat(response.authorizationReference()).isEqualTo("AUTH-630001");
+        assertThat(response.status()).isEqualTo(ClearingStatus.POSTED);
+    }
+
+    @Test
+    void getMissingClearingThrowsNotFound() {
+        when(clearingRepository.findByClearingReference("CLR-NOT-FOUND"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> clearingService.getClearing("CLR-NOT-FOUND"))
+                .isInstanceOf(ClearingNotFoundException.class)
+                .hasMessage("Clearing not found with clearing reference: CLR-NOT-FOUND");
     }
 
     private ClearingResponse clear(Fixture fixture, ClearingCreateRequest request) {
