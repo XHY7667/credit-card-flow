@@ -32,6 +32,11 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.UUID;
 
+import static org.springframework.http.HttpMethod.DELETE;
+import static org.springframework.http.HttpMethod.GET;
+import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.HttpMethod.PUT;
+
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfig {
 
@@ -48,7 +53,23 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
                 .authorizeHttpRequests(authorize -> authorize
-                        .anyRequest().permitAll());
+                        .requestMatchers(POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(GET, "/actuator/health").permitAll()
+                        .requestMatchers(POST, "/api/v1/merchants").hasRole("ADMIN")
+                        .requestMatchers(PUT, "/api/v1/merchants/**").hasRole("ADMIN")
+                        .requestMatchers(DELETE, "/api/v1/merchants/**").hasRole("ADMIN")
+                        .requestMatchers(POST, "/api/v1/card-accounts").hasRole("ADMIN")
+                        .requestMatchers(PUT, "/api/v1/card-accounts/**").hasRole("ADMIN")
+                        .requestMatchers(POST, "/api/v1/cards").hasRole("ADMIN")
+                        .requestMatchers(PUT, "/api/v1/cards/**").hasRole("ADMIN")
+                        .requestMatchers(
+                                "/actuator/info",
+                                "/actuator/metrics",
+                                "/actuator/metrics/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers("/api/v1/**").authenticated()
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().denyAll());
 
         return http.build();
     }

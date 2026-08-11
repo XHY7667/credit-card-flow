@@ -42,8 +42,8 @@ class SecurityConfigTest {
     }
 
     @Test
-    void existingBusinessApiRemainsAvailableWithoutAuthentication() throws Exception {
+    void businessApiRequiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/merchants"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
     }
 }

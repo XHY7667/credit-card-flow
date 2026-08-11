@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties =
         "management.endpoints.web.exposure.include=health,info,metrics")
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 class ActuatorIntegrationTest {
 
     @Autowired

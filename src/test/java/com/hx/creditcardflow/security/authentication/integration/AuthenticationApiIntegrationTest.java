@@ -65,7 +65,7 @@ class AuthenticationApiIntegrationTest {
     }
 
     @Test
-    void enabledUserCanLoginAndUseTheNativeBearerTokenWhileBusinessApisRemainPermitAll()
+    void enabledUserCanLoginAndUseTheNativeBearerToken()
             throws Exception {
         persistUser("integration-admin", AppRole.ADMIN, true);
 
@@ -94,7 +94,7 @@ class AuthenticationApiIntegrationTest {
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/merchants"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

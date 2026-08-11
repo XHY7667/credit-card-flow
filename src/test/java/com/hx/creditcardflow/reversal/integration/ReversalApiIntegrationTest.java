@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.flyway.enabled=true",
         "spring.jpa.hibernate.ddl-auto=validate"
 })
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 @Testcontainers
 class ReversalApiIntegrationTest {
 
