@@ -1,10 +1,12 @@
 package com.hx.creditcardflow.security.config;
 
+import com.hx.creditcardflow.security.user.service.AppUserDetailsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,6 +25,9 @@ class SecurityConfigTest {
     private PasswordEncoder passwordEncoder;
 
     @Autowired
+    private UserDetailsService userDetailsService;
+
+    @Autowired
     private MockMvc mockMvc;
 
     @Test
@@ -31,6 +36,7 @@ class SecurityConfigTest {
         String encodedPassword = passwordEncoder.encode(rawPassword);
 
         assertThat(securityFilterChain).isNotNull();
+        assertThat(userDetailsService).isInstanceOf(AppUserDetailsService.class);
         assertThat(encodedPassword).isNotEqualTo(rawPassword);
         assertThat(passwordEncoder.matches(rawPassword, encodedPassword)).isTrue();
     }
