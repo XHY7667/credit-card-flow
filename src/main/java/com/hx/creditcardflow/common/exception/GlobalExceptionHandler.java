@@ -24,6 +24,7 @@ import com.hx.creditcardflow.reversal.exception.ReversalNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -36,6 +37,15 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationFailure(
+            AuthenticationException exception,
+            HttpServletRequest request
+    ) {
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Authentication failed",
+                request.getRequestURI(), null);
+    }
 
     @ExceptionHandler(ClearingNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleClearingNotFound(
