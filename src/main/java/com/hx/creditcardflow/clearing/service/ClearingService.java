@@ -9,6 +9,7 @@ import com.hx.creditcardflow.clearing.dto.ClearingCreateRequest;
 import com.hx.creditcardflow.clearing.dto.ClearingResponse;
 import com.hx.creditcardflow.clearing.entity.Clearing;
 import com.hx.creditcardflow.clearing.entity.ClearingStatus;
+import com.hx.creditcardflow.clearing.event.ClearingPostedEvent;
 import com.hx.creditcardflow.clearing.exception.ClearingAmountMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchException;
 import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
@@ -16,7 +17,11 @@ import com.hx.creditcardflow.clearing.exception.ClearingNotFoundException;
 import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
 import com.hx.creditcardflow.clearing.repository.ClearingRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -24,13 +29,16 @@ public class ClearingService {
 
     private final ClearingRepository clearingRepository;
     private final AuthorizationRepository authorizationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ClearingService(
             ClearingRepository clearingRepository,
-            AuthorizationRepository authorizationRepository
+            AuthorizationRepository authorizationRepository,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.clearingRepository = clearingRepository;
         this.authorizationRepository = authorizationRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -77,7 +85,18 @@ public class ClearingService {
                 ClearingStatus.POSTED
         );
 
-        return toResponse(clearingRepository.save(clearing));
+        Clearing savedClearing = clearingRepository.save(clearing);
+        eventPublisher.publishEvent(new ClearingPostedEvent(
+                UUID.randomUUID(),
+                savedClearing.getClearingReference(),
+                savedClearing.getAuthorization().getAuthorizationReference(),
+                savedClearing.getAmount(),
+                savedClearing.getCurrencyCode(),
+                savedClearing.getStatus(),
+                Instant.now()
+        ));
+
+        return toResponse(savedClearing);
     }
 
     public ClearingResponse getClearing(String clearingReference) {
