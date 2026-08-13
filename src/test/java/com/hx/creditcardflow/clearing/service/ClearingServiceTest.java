@@ -19,6 +19,7 @@ import com.hx.creditcardflow.clearing.exception.ClearingCurrencyMismatchExceptio
 import com.hx.creditcardflow.clearing.exception.ClearingNotAllowedException;
 import com.hx.creditcardflow.clearing.exception.ClearingNotFoundException;
 import com.hx.creditcardflow.clearing.exception.DuplicateClearingReferenceException;
+import com.hx.creditcardflow.clearing.event.ClearingPostedEvent;
 import com.hx.creditcardflow.clearing.repository.ClearingRepository;
 import com.hx.creditcardflow.merchant.entity.Merchant;
 import com.hx.creditcardflow.merchant.entity.MerchantStatus;
@@ -28,6 +29,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -48,6 +50,9 @@ class ClearingServiceTest {
     @Mock
     private AuthorizationRepository authorizationRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private ClearingService clearingService;
 
@@ -64,6 +69,23 @@ class ClearingServiceTest {
         clear(activeFixture(AuthorizationStatus.APPROVED), validRequest());
 
         verify(clearingRepository).save(any(Clearing.class));
+    }
+
+    @Test
+    void successfulClearingPublishesCorrectPostedEventMapping() {
+        clear(activeFixture(AuthorizationStatus.APPROVED), validRequest());
+        ArgumentCaptor<ClearingPostedEvent> captor = ArgumentCaptor.forClass(ClearingPostedEvent.class);
+
+        verify(eventPublisher).publishEvent(captor.capture());
+
+        ClearingPostedEvent event = captor.getValue();
+        assertThat(event.eventId()).isNotNull();
+        assertThat(event.clearingReference()).isEqualTo("CLR-630001");
+        assertThat(event.authorizationReference()).isEqualTo("AUTH-630001");
+        assertThat(event.amount()).isEqualByComparingTo("125.75");
+        assertThat(event.currency()).isEqualTo("USD");
+        assertThat(event.status()).isEqualTo(ClearingStatus.POSTED);
+        assertThat(event.occurredAt()).isNotNull();
     }
 
     @Test
