@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: creditcardflow-api
+              uri: ${CREDITCARDFLOW_SERVICE_BASE_URL:http://localhost:8080}
+              predicates:
+                - Path=/api/v1/**
+
+server:
+  port: ${SERVER_PORT:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
