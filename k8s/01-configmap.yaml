@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: creditcardflow-config
+  namespace: creditcardflow
+data:
+  POSTGRES_DB: creditcardflow
+  POSTGRES_USER: creditcardflow
+  SPRING_PROFILES_ACTIVE: local
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/creditcardflow
+  SPRING_DATASOURCE_USERNAME: creditcardflow
+  KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+  KAFKA_PUBLISHING_ENABLED: "true"
+  KAFKA_CONSUMER_ENABLED: "false"
+  CLEARING_KAFKA_CONSUMER_ENABLED: "true"
+  CREDITCARDFLOW_SERVICE_BASE_URL: http://creditcardflow:8080
