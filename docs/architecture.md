@@ -1,183 +1,132 @@
-# CreditCardFlow Architecture
+# CreditCardFlow System Architecture
 
-## Architectural approach
+## Purpose
 
-CreditCardFlow begins as a **modular monolith**: one Spring Boot application and deployment unit with explicit business-module boundaries. This approach keeps the capstone operationally simple while allowing each domain area to develop with limited coupling and a clear path to later extraction.
+CreditCardFlow is a synthetic educational backend that models a subset of issuer-side credit-card processing. It provides secured REST operations for merchants, card accounts, cards, authorizations, reversals, and clearings, together with asynchronous notification of posted clearings. It is not intended to handle real cardholder data or represent a complete production payment platform.
 
-Modules should communicate through defined service interfaces and domain-level contracts rather than reaching into another module's persistence implementation. Cross-module database relationships should be used deliberately so future service boundaries remain practical.
-
-## Layered structure
-
-The synchronous request path follows this dependency direction:
-
-`controller -> service -> repository -> database`
-
-- **Controller**: Defines HTTP endpoints, authenticates and authorizes requests, validates transport-level input, and maps results to API responses.
-- **Service**: Owns use-case orchestration, transaction boundaries, domain rules, idempotency, and coordination between modules.
-- **Repository**: Encapsulates persistence operations and queries.
-- **Database**: Stores application state, immutable financial records, audit information, and processing metadata.
-
-Dependencies flow inward through these layers. Controllers do not access repositories directly, and repositories do not contain workflow logic.
-
-## DTO and entity separation
-
-API DTOs are separate from JPA entities. Request and response DTOs define the external contract and its validation, while JPA entities represent persistence concerns. Mapping occurs at the application boundary or in dedicated mappers.
-
-This separation prevents database structure from becoming the API contract, avoids accidental serialization of internal or sensitive fields, and permits either side to evolve independently.
-
-## Planned package structure
-
-The following is a plan, not a requirement to create these packages during the documentation phase:
-
-```text
-com.hx.creditcardflow
-|-- common
-|   |-- error
-|   |-- idempotency
-|   `-- audit
-|-- merchant
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- cardaccount
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- authorization
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- reversal
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- clearing
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- settlement
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- reconciliation
-|   |-- controller
-|   |-- service
-|   |-- repository
-|   |-- dto
-|   `-- entity
-|-- security
-|-- messaging
-`-- configuration
-```
-
-Packaging by business capability keeps related layers together and makes module ownership clearer than a single application-wide package for each technical layer.
-
-## Planned domain objects
-
-- **Merchant**: Represents an onboarded merchant, its identifier, status, and operational attributes.
-- **CardAccount**: Represents a simplified issuer account with a synthetic card reference, account status, credit limit, and available credit.
-- **AuthorizationTransaction**: Records an authorization request, decision, amount, merchant, account reference, idempotency information, and lifecycle status.
-- **ReversalTransaction**: Records the cancellation or reduction of a prior authorization and references the transaction being reversed.
-- **ClearingRecord**: Represents a merchant-presented financial record to be matched with earlier authorization activity.
-- **SettlementBatch**: Groups eligible clearing records, totals the issuer's settlement position, and tracks batch processing state.
-- **ReconciliationResult**: Records the outcome of comparing transaction stages, including matches and classified exceptions.
-
-## Financial record immutability
-
-Financial transactions are immutable business records. Once accepted, their original monetary facts and decision history must not be overwritten or deleted as a routine correction mechanism. Corrections are represented by linked **reversal**, **refund**, or **adjustment** records, preserving both the original event and the compensating action.
-
-Mutable processing metadata, such as a workflow status, may change only through controlled state transitions with appropriate auditing and concurrency protection. Monetary amounts should use fixed-precision decimal types and explicit currency semantics.
-
-## Component diagram
+## Logical Architecture
 
 ```mermaid
 flowchart LR
-    Client[Merchant / Operations / Admin Client]
+    Client[Client]
+    Gateway[api-gateway<br/>8082]
+    Root[CreditCardFlow<br/>8080]
+    Database[(PostgreSQL<br/>5432)]
+    Kafka[[Apache Kafka<br/>internal 19092]]
+    Consumer[clearing-event-service<br/>8081]
 
-    subgraph Application[CreditCardFlow Modular Monolith]
-        API[REST Controllers]
-        Merchant[Merchant Module]
-        Account[Card Account Module]
-        Auth[Authorization Module]
-        Reversal[Reversal Module]
-        Clearing[Clearing Module]
-        Settlement[Settlement Module]
-        Reconciliation[Reconciliation Module]
-        Security[Security and Audit]
-
-        API --> Merchant
-        API --> Account
-        API --> Auth
-        API --> Reversal
-        API --> Clearing
-        API --> Settlement
-        API --> Reconciliation
-        Security -. protects and audits .-> API
-        Auth --> Account
-        Auth --> Merchant
-        Reversal --> Auth
-        Clearing --> Auth
-        Settlement --> Clearing
-        Reconciliation --> Auth
-        Reconciliation --> Clearing
-        Reconciliation --> Settlement
-    end
-
-    DB[(Relational Database)]
-    Client --> API
-    Merchant --> DB
-    Account --> DB
-    Auth --> DB
-    Reversal --> DB
-    Clearing --> DB
-    Settlement --> DB
-    Reconciliation --> DB
-    Security --> DB
+    Client -->|HTTP /api/v1/**| Gateway
+    Gateway -->|Forwarded HTTP request| Root
+    Root -->|JPA transactions| Database
+    Root -->|ClearingPostedEvent| Kafka
+    Kafka -->|Asynchronous consumption| Consumer
 ```
 
-## High-level transaction flow
+The Gateway-to-CreditCardFlow path is synchronous HTTP. The clearing event service is not called synchronously by CreditCardFlow or routed through the Gateway; it receives events asynchronously from Kafka.
 
-```mermaid
-sequenceDiagram
-    actor M as Merchant
-    participant A as Authorization
-    participant R as Reversal
-    participant C as Clearing
-    participant S as Settlement
-    participant X as Reconciliation
+## Component Responsibilities
 
-    M->>A: Submit authorization request
-    A-->>M: Approve or decline
-    alt Authorization must be cancelled or reduced
-        M->>R: Submit reversal with idempotency key
-        R->>A: Reference original authorization
-        R-->>M: Confirm reversal result
-    else Approved transaction is completed
-        M->>C: Submit clearing record
-        C->>A: Match authorization when available
-        C->>S: Mark eligible for settlement
-        S->>S: Build and process settlement batch
-        S->>X: Provide settlement outcome
-        C->>X: Provide clearing records
-        A->>X: Provide authorization records
-        X-->>M: Report match or exception
-    end
-```
+### API Gateway
 
-## Future evolution
+`api-gateway` is an independent Spring Boot and Spring Cloud Gateway application.
 
-The modular monolith remains the initial target. As volume, team ownership, or independent scaling needs grow, durable domain events can be published through an outbox pattern to Kafka. Candidate events include authorization decided, authorization reversed, clearing received, settlement completed, and reconciliation exception detected.
+- Acts as the external REST entry point for the containerized architecture.
+- Routes `/api/v1/**` to CreditCardFlow without stripping or rewriting the path.
+- Preserves the `Authorization` header and downstream response.
+- Does not authenticate credentials, parse JWTs, or implement authorization rules.
+- Exposes its own Actuator health and information endpoints.
 
-Kafka-based processing can decouple clearing, settlement, reconciliation, notification, and monitoring workflows. Mature modules may then be extracted incrementally into microservices, each owning its data and APIs. This evolution requires explicit event schemas, idempotent consumers, partitioning and ordering rules, retry and dead-letter strategies, distributed tracing, and reconciliation for eventual consistency. Microservices and Kafka are planned evolution points, not MVP prerequisites.
+### CreditCardFlow
+
+The root CreditCardFlow application owns the business and security boundary.
+
+- Exposes the Merchant, CardAccount, Card, Authorization, Reversal, Clearing, and authentication REST APIs.
+- Uses Spring Security for persistent-user authentication, stateless JWT validation, and USER/ADMIN authorization.
+- Applies validation, centralized exception handling, and transactional business rules.
+- Persists domain state through Spring Data JPA and PostgreSQL.
+- Publishes `ClearingPostedEvent` messages after successful clearing transaction commits.
+- Exposes Actuator health, information, and metrics endpoints.
+
+The root Kafka consumer is disabled during normal runtime. It is retained for the focused embedded producer-to-consumer integration test.
+
+### PostgreSQL
+
+PostgreSQL provides transactional persistence for the root application.
+
+- Stores domain entities and persistent application users.
+- Enforces primary keys, foreign keys, business-reference uniqueness, nullability, and status checks.
+- Stores fixed-precision financial values.
+- Uses a Flyway-owned schema; Hibernate validates rather than creates or updates that schema.
+
+### Kafka
+
+Apache Kafka transports posted-clearing events asynchronously.
+
+- Topic: `creditcardflow.transaction-events`
+- Compose internal client listener: `kafka:19092`
+- Compose host listener: `localhost:9092`
+- Kubernetes client Service: `kafka:19092`
+- Current topic design: one partition and one replica
+
+Kafka is not used as the transactional database, and the implementation does not claim an outbox or exactly-once delivery guarantee.
+
+### Clearing Event Service
+
+`clearing-event-service` is an independently packaged Spring Boot application.
+
+- Consumes `creditcardflow.transaction-events` as consumer group `clearing-event-service`.
+- Deserializes headerless JSON into its own local `ClearingPostedEvent` type.
+- Logs only the event ID, clearing reference, and status.
+- Has no database and does not call CreditCardFlow over REST.
+- Exposes its own Actuator health and information endpoints.
+
+## Runtime and Deployment Architecture
+
+### Docker
+
+The repository contains separate multi-stage Dockerfiles for:
+
+- `creditcardflow`
+- `clearing-event-service`
+- `api-gateway`
+
+Each runtime image contains the executable application JAR and Java runtime requirements, runs as a non-root user, and exposes its application port.
+
+### Docker Compose
+
+The root `compose.yaml` runs five services on the default Compose network:
+
+| Service | Responsibility | Host port |
+|---|---|---:|
+| `postgres` | PostgreSQL persistence | 5432 |
+| `kafka` | Single-node KRaft broker/controller | 9092 |
+| `creditcardflow` | Root business and security service | 8080 |
+| `clearing-event-service` | Kafka event consumer | 8081 |
+| `api-gateway` | External REST entry point | 8082 |
+
+Within the Compose network, CreditCardFlow reaches PostgreSQL at `postgres:5432`; both Kafka clients reach Kafka at `kafka:19092`; and the Gateway reaches CreditCardFlow at `creditcardflow:8080`. Infrastructure health checks gate dependent startup without sleep commands.
+
+### Kubernetes
+
+Plain manifests under `k8s/` define the same logical components in namespace `creditcardflow`.
+
+- PostgreSQL uses a PersistentVolumeClaim and an internal ClusterIP Service.
+- Kafka, CreditCardFlow, and clearing-event-service use internal ClusterIP Services.
+- API Gateway is the only externally exposed application, through NodePort `30082` targeting port 8082.
+- The three Java applications use startup, readiness, and liveness probes against `/actuator/health`.
+- Runtime configuration is separated between a ConfigMap and an example Secret boundary.
+
+The manifests were statically/offline validated and were not deployed to a live Kubernetes cluster as part of this implementation.
+
+## Observability
+
+- CreditCardFlow exposes Actuator health, information, and metrics endpoints.
+- Micrometer records authorization-approved, authorization-declined, reversal-completed, and clearing-posted counters.
+- A service-layer AOP aspect logs method outcome and duration without intentionally logging argument or DTO values.
+- The Gateway and clearing event service expose their own health and information endpoints.
+
+## CI Architecture
+
+GitHub Actions runs three independent Maven test jobs for CreditCardFlow, clearing-event-service, and api-gateway. A downstream Docker job runs only after all three test jobs pass; it validates the Compose configuration and builds all three application images.
+
+The workflow implements continuous integration and build verification. It does not publish images or deploy Kubernetes resources.
