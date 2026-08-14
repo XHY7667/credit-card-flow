@@ -1,0 +1,1337 @@
+{
+  "info": {
+    "name": "CreditCardFlow Submission Demo",
+    "description": "Submission-ready local demo. Business APIs use the API Gateway on port 8082; secured root-application actuator requests use serviceBaseUrl on port 8080.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 Health",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}/actuator/health"
+              ]
+            },
+            "description": "Expected 200 with status UP from the API Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status is UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Authentication",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}/api/v1/auth/login"
+              ]
+            },
+            "description": "Authenticates a persisted enabled ADMIN AppUser. No registration API exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"accessToken present\", () => pm.expect(body.accessToken).to.be.a(\"string\").and.not.empty);",
+                  "if (body.accessToken) pm.environment.set(\"adminToken\", body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}/api/v1/auth/login"
+              ]
+            },
+            "description": "Authenticates a persisted enabled USER AppUser.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{userUsername}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"accessToken present\", () => pm.expect(body.accessToken).to.be.a(\"string\").and.not.empty);",
+                  "if (body.accessToken) pm.environment.set(\"userToken\", body.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Merchant",
+      "item": [
+        {
+          "name": "Create Merchant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/merchants",
+              "host": [
+                "{{baseUrl}}/api/v1/merchants"
+              ]
+            },
+            "description": "ADMIN creates an active synthetic merchant. Captures its database id for the implemented GET-by-id route.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"merchantCode\": \"{{merchantCode}}\",\n  \"legalName\": \"Synthetic Demo Market LLC\",\n  \"displayName\": \"Synthetic Demo Market\",\n  \"merchantCategoryCode\": \"5411\",\n  \"countryCode\": \"US\",\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"merchant is active\", () => pm.expect(body.status).to.eql(\"ACTIVE\"));",
+                  "if (body.id !== undefined) pm.environment.set(\"merchantId\", String(body.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Merchant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/merchants/{{merchantId}}",
+              "host": [
+                "{{baseUrl}}/api/v1/merchants/{{merchantId}}"
+              ]
+            },
+            "description": "USER reads the created merchant by database id.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"merchant code matches\", () => pm.expect(pm.response.json().merchantCode).to.eql(pm.environment.get(\"merchantCode\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Card Account",
+      "item": [
+        {
+          "name": "Create CardAccount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts"
+              ]
+            },
+            "description": "ADMIN creates the controlled USD account. Expected initial creditLimit 1000.00, currentBalance 0.00, availableCredit 1000.00.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"{{accountNumber}}\",\n  \"creditLimit\": 1000,\n  \"currencyCode\": \"USD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const b=pm.response.json();",
+                  "pm.test(\"initial financial state\", () => { pm.expect(Number(b.creditLimit)).to.eql(1000); pm.expect(Number(b.currentBalance)).to.eql(0); pm.expect(Number(b.availableCredit)).to.eql(1000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get CardAccount - Initial",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "Expected 1000.00 limit, 0.00 balance, 1000.00 available.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Card",
+      "item": [
+        {
+          "name": "Create Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cards",
+              "host": [
+                "{{baseUrl}}/api/v1/cards"
+              ]
+            },
+            "description": "ADMIN issues a synthetic card. Only lastFour is modeled; no PAN or CVV is sent.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cardReference\": \"{{cardReference}}\",\n  \"lastFour\": \"4242\",\n  \"expirationMonth\": 12,\n  \"expirationYear\": 2030,\n  \"cardAccountNumber\": \"{{accountNumber}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"card is active\", () => pm.expect(pm.response.json().status).to.eql(\"ACTIVE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Card",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cards/{{cardReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/cards/{{cardReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Authorization",
+      "item": [
+        {
+          "name": "Create Authorization #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations"
+              ]
+            },
+            "description": "Creates the first USD 200.00 PURCHASE. With the controlled active state, expected status is APPROVED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"authorizationReference\": \"{{authorizationReference}}\",\n  \"cardReference\": \"{{cardReference}}\",\n  \"merchantCode\": \"{{merchantCode}}\",\n  \"amount\": 200,\n  \"currencyCode\": \"USD\",\n  \"authorizationType\": \"PURCHASE\",\n  \"channel\": \"ECOMMERCE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"authorization approved\", () => pm.expect(pm.response.json().status).to.eql(\"APPROVED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Authorization #1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations/{{authorizationReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations/{{authorizationReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"authorization approved\", () => pm.expect(pm.response.json().status).to.eql(\"APPROVED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get CardAccount - After Authorization #1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "Expected creditLimit 1000.00, currentBalance 0.00, availableCredit 800.00.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b=pm.response.json();",
+                  "pm.test(\"reserved-credit state\", () => { pm.expect(Number(b.creditLimit)).to.eql(1000); pm.expect(Number(b.currentBalance)).to.eql(0); pm.expect(Number(b.availableCredit)).to.eql(800); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Authorization #2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations"
+              ]
+            },
+            "description": "Run after completing Authorization #1 reversal. Expected APPROVED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"authorizationReference\": \"{{secondAuthorizationReference}}\",\n  \"cardReference\": \"{{cardReference}}\",\n  \"merchantCode\": \"{{merchantCode}}\",\n  \"amount\": 200,\n  \"currencyCode\": \"USD\",\n  \"authorizationType\": \"PURCHASE\",\n  \"channel\": \"ECOMMERCE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"second authorization approved\", () => pm.expect(pm.response.json().status).to.eql(\"APPROVED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Authorization #2",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations/{{secondAuthorizationReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations/{{secondAuthorizationReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get CardAccount - After Authorization #2",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "Expected creditLimit 1000.00, currentBalance 0.00, availableCredit 800.00.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b=pm.response.json();",
+                  "pm.test(\"second reserved-credit state\", () => { pm.expect(Number(b.creditLimit)).to.eql(1000); pm.expect(Number(b.currentBalance)).to.eql(0); pm.expect(Number(b.availableCredit)).to.eql(800); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Reversal",
+      "item": [
+        {
+          "name": "Create Full Reversal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{reversalIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reversals",
+              "host": [
+                "{{baseUrl}}/api/v1/reversals"
+              ]
+            },
+            "description": "Fully reverses Authorization #1. Expected COMPLETED; the authorization becomes REVERSED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reversalReference\": \"{{reversalReference}}\",\n  \"authorizationReference\": \"{{authorizationReference}}\",\n  \"amount\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"reversal completed\", () => pm.expect(pm.response.json().status).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay Full Reversal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{reversalIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reversals",
+              "host": [
+                "{{baseUrl}}/api/v1/reversals"
+              ]
+            },
+            "description": "Identical body and Idempotency-Key return the existing COMPLETED reversal with 201 and do not release credit again.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reversalReference\": \"{{reversalReference}}\",\n  \"authorizationReference\": \"{{authorizationReference}}\",\n  \"amount\": 200\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"replay returns completed result\", () => pm.expect(pm.response.json().status).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Reversal",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reversals/{{reversalReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/reversals/{{reversalReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"reversal completed\", () => pm.expect(pm.response.json().status).to.eql(\"COMPLETED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Authorization #1 - Reversed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations/{{authorizationReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations/{{authorizationReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"authorization reversed\", () => pm.expect(pm.response.json().status).to.eql(\"REVERSED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get CardAccount - After Reversal",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "Expected creditLimit 1000.00, currentBalance 0.00, availableCredit 1000.00, including after replay.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b=pm.response.json();",
+                  "pm.test(\"released-credit state\", () => { pm.expect(Number(b.creditLimit)).to.eql(1000); pm.expect(Number(b.currentBalance)).to.eql(0); pm.expect(Number(b.availableCredit)).to.eql(1000); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Clearing",
+      "item": [
+        {
+          "name": "Post Clearing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clearings",
+              "host": [
+                "{{baseUrl}}/api/v1/clearings"
+              ]
+            },
+            "description": "Posts Authorization #2. Expected clearing POSTED and authorization CLEARED.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clearingReference\": \"{{clearingReference}}\",\n  \"authorizationReference\": \"{{secondAuthorizationReference}}\",\n  \"amount\": 200,\n  \"currencyCode\": \"USD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"clearing posted\", () => pm.expect(pm.response.json().status).to.eql(\"POSTED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Clearing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clearings/{{clearingReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/clearings/{{clearingReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"clearing posted\", () => pm.expect(pm.response.json().status).to.eql(\"POSTED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Authorization #2 - Cleared",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/authorizations/{{secondAuthorizationReference}}",
+              "host": [
+                "{{baseUrl}}/api/v1/authorizations/{{secondAuthorizationReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"authorization cleared\", () => pm.expect(pm.response.json().status).to.eql(\"CLEARED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get CardAccount - After Clearing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "Key financial outcome: creditLimit 1000.00, currentBalance 200.00, availableCredit 800.00.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const b=pm.response.json();",
+                  "pm.test(\"posted financial state\", () => { pm.expect(Number(b.creditLimit)).to.eql(1000); pm.expect(Number(b.currentBalance)).to.eql(200); pm.expect(Number(b.availableCredit)).to.eql(800); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Security Checks",
+      "item": [
+        {
+          "name": "Anonymous Protected Endpoint - 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}",
+              "host": [
+                "{{baseUrl}}/api/v1/card-accounts/{{accountNumber}}"
+              ]
+            },
+            "description": "No bearer token is sent. Expected 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "USER Calls ADMIN Metrics - 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics"
+              ]
+            },
+            "description": "Safe ADMIN-only read. A valid USER token is authenticated but forbidden.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "ADMIN Calls ADMIN Metrics - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics"
+              ]
+            },
+            "description": "The same safe ADMIN-only read succeeds for ADMIN.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Observability",
+      "item": [
+        {
+          "name": "Root Application Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/health",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/health"
+              ]
+            },
+            "description": "Direct root application health; expected 200 and UP."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status is UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Application Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/info",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/info"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Metrics Index",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics"
+              ]
+            },
+            "description": "Metric names exposed by the root application.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approved Authorization Counter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.authorization.approved",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.authorization.approved"
+              ]
+            },
+            "description": "Counter should reflect successful demo authorizations; no exact count is assumed.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Completed Reversal Counter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.reversal.completed",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.reversal.completed"
+              ]
+            },
+            "description": "Counter should reflect completed reversal service calls, including any implementation-counted replay; no exact count is assumed.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Posted Clearing Counter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.clearing.posted",
+              "host": [
+                "{{serviceBaseUrl}}/actuator/metrics/creditcardflow.clearing.posted"
+              ]
+            },
+            "description": "Counter should reflect successful posted clearings; no exact count is assumed.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
